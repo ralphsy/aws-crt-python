@@ -17,6 +17,20 @@ import sysconfig
 from wheel.bdist_wheel import bdist_wheel
 
 
+# Set the cross-compiler environment variables
+
+#os.environ['CC'] = '/opt/gcc-linaro-4.9-2014.11-x86_64_arm-linux-gnueabihf/bin/arm-linux-gnueabihf-gcc'
+
+#os.environ['CXX'] = '/opt/gcc-linaro-4.9-2014.11-x86_64_arm-linux-gnueabihf/bin/arm-linux-gnueabihf-g++'
+
+#os.environ['CFLAGS'] = f'-I{os.environ["CROSS_COMPILE_PYTHON_INCLUDE"]}'
+
+#os.environ['LDFLAGS'] = f'-L{os.environ["CROSS_COMPILE_PYTHON_LIB"]}'
+
+print("Default Compiler",  distutils.ccompiler.get_default_compiler())
+print("CC:", os.environ.get('CC'))
+print("CXX:", os.environ.get('CXX'))
+
 def is_64bit():
     return sys.maxsize > 2 ** 32
 
@@ -198,11 +212,12 @@ class awscrt_build_ext(setuptools.command.build_ext.build_ext):
         cmake_args = [cmake]
         cmake_args.append(f'-H{source_dir}')
         cmake_args.append(f'-B{build_dir}')
-        cmake_args.extend(determine_generator_args())
-        cmake_args.extend(determine_cross_compile_args())
+       # cmake_args.extend(determine_generator_args())
+       # cmake_args.extend(determine_cross_compile_args())
         cmake_args.extend([
             f'-DCMAKE_INSTALL_PREFIX={install_path}',
             f'-DCMAKE_BUILD_TYPE={build_type}',
+            f'-DCMAKE_TOOLCHAIN_FILE={os.environ["CMAKE_TOOLCHAIN_FILE"]}',
         ])
 
         if using_system_libcrypto():
@@ -217,7 +232,7 @@ class awscrt_build_ext(setuptools.command.build_ext.build_ext):
 
             if osx_arch:
                 cmake_args.append(f'-DCMAKE_OSX_ARCHITECTURES={osx_arch}')
-
+        print("CMake args:", cmake_args)
         run_cmd(cmake_args)
 
         # cmake build/install
@@ -227,12 +242,13 @@ class awscrt_build_ext(setuptools.command.build_ext.build_ext):
             '--config', build_type,
             '--target', 'install',
         ]
+        print("CMake Build cmd:", build_cmd)
         run_cmd(build_cmd)
 
     def _build_dependencies(self):
         build_dir = os.path.join(self.build_temp, 'deps')
         install_path = os.path.join(self.build_temp, 'deps', 'install')
-
+        print("Here")
         if is_macos_universal2() and not is_development_mode():
             # create macOS universal binary by compiling for x86_64 and arm64,
             # each in its own subfolder, and then creating a universal binary
@@ -289,13 +305,15 @@ class awscrt_build_ext(setuptools.command.build_ext.build_ext):
             lib_dir = 'lib32'
 
         self.library_dirs.insert(0, os.path.join(install_path, lib_dir))
-
+        print("here22222")
     def run(self):
+        print("!!!!!!!!")
         if using_system_libs():
             print("Skip building dependencies, using system libs.")
         elif not os.path.exists(os.path.join(PROJECT_DIR, 'crt', 'aws-c-common', 'CMakeLists.txt')):
             print("Skip building dependencies, source not found.")
         else:
+            print("building_dependencies")
             self._build_dependencies()
 
         # continue with normal build_ext.run()
@@ -308,6 +326,11 @@ class bdist_wheel_abi3(bdist_wheel):
         if python.startswith("cp") and sys.version_info >= (3, 11):
             # on CPython, our wheels are abi3 and compatible back to 3.11
             return "cp311", "abi3", plat
+        print("tag platform detected", plat)
+        print("sys config plat detected", sysconfig.get_platform())
+        #added custom logic for cross-compiled architecture
+        if plat == "linux_x86_64":
+            return python, abi, "linux_armv7l"
 
         return python, abi, plat
 
@@ -412,7 +435,9 @@ def awscrt_ext():
         # 3.11 is the first stable ABI that has everything we need
         define_macros.append(('Py_LIMITED_API', '0x030B0000'))
         py_limited_api = True
-
+    print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+    print(extra_compile_args)
+    print(extra_link_args)
     return setuptools.Extension(
         '_awscrt',
         language='c',
